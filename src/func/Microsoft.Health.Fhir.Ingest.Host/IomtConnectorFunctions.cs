@@ -55,7 +55,7 @@ namespace Microsoft.Health.Fhir.Ingest.Service
             try
             {
                 await measurementImportService.ProcessStreamAsync(req.Body, templateDefinition, _logger).ConfigureAwait(false);
-                _logger.LogTrace ($"Return statment in function gives this {new AcceptedResult()}");
+                _logger.LogTrace($"Return statment in function gives this {new AcceptedResult()}");
                 return new AcceptedResult();
             }
             catch (Exception ex)
