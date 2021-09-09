@@ -100,7 +100,7 @@ namespace Microsoft.Health.Fhir.Ingest.Service
                    .SetSize(1)
                    .SetValue(result)
                    .Dispose();
-
+            _logger.LogTrace($"Observation result is {result.Id}");
             return result.Id;
         }
 
