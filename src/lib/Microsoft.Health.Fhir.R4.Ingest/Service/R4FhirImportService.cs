@@ -86,6 +86,7 @@ namespace Microsoft.Health.Fhir.Ingest.Service
                      .ExecuteAndCaptureAsync(async () =>
                      {
                          var mergedObservation = MergeObservation(config, existingObservation, observationGroup);
+                          _logger.LogTrace($"Merged Observation is {mergedObservation}");
                          return await _client.UpdateAsync(mergedObservation, versionAware: true).ConfigureAwait(false);
                      }).ConfigureAwait(false);
 
