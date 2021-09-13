@@ -67,6 +67,11 @@ namespace Microsoft.Health.Fhir.Ingest.Service
             if (existingObservation == null)
             {
                 var newObservation = GenerateObservation(config, observationGroup, identifier, ids);
+                _logger.LogTrace($"Generated Observation Subject is {newObservation.Subject}");
+                _logger.LogTrace($"Generated Observation Identifier is {newObservation.Identifier}");
+                _logger.LogTrace($"Generated Observation Device is {newObservation.Device}");
+                _logger.LogTrace($"Generated Observation Encounter is{newObservation.Encounter}");
+                _logger.LogTrace($"Generated Observation is {newObservation}");
                 result = await _client.CreateAsync(newObservation).ConfigureAwait(false);
                 _logger.LogMetric(IomtMetrics.FhirResourceSaved(ResourceType.Observation, ResourceOperation.Created), 1);
             }
