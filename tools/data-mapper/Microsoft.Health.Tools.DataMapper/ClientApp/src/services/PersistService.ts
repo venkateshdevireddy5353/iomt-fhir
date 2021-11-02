@@ -6,7 +6,7 @@
 // -------------
 // Persist Services.
 import * as _ from "lodash";
-import { Mapping } from "../store/Mapping";
+import { DeviceMapping, FhirMapping, Mapping } from "../store/Mapping";
 import * as Utils from "./Utils";
 
 const LocalStorageKey = 'iomt-mappings';
@@ -47,26 +47,109 @@ const getAllMappings = (): Mapping[] => {
 
 const getMapping = (mappingId: string): Mapping => {
     const storage = loadFromLocalStorage();
-    return storage.mappingsById[mappingId];
+    const mappings = storage.mappingsById;
+    if (!mappings) {
+        return {} as Mapping;
+    }
+    return mappings[mappingId];
 }
 
-const createMapping = (typename: string): Promise<Mapping> => {
+const createMappingsFromTemplates = (deviceTemplate: string, fhirTemplate: string): Promise<Mapping[]> => {
     return new Promise((resolve, reject) => {
-        const mappings = getAllMappings();
+        Promise.all([Utils.generateDeviceMappings(deviceTemplate), Utils.generateFhirMappings(fhirTemplate)])
+            .then(mappings => {
+                const currentMappings = getAllMappings();
+                let newMappings: Mapping[] = [];
 
-        if (_.find(mappings, { typeName: typename })) {
-            reject(`The typename ${typename} existed`);
+                if (mappings.length !== 2) {
+                    reject(`System error: ${mappings.length} set(s) of mappings were generated.
+                        Please ensure there are no other errors and try again.`);
+                    return;
+                }
+                const deviceMappings = mappings[0];
+                let fhirMappings = mappings[1];
+
+                for (const deviceMapping of deviceMappings) {
+                    const typename = deviceMapping.typeName;
+                    if (_.find(currentMappings, { typeName: typename })) {
+                        reject(`A mapping in the Data Mapper already has the typeName "${typename}".
+                            Please enter another typeName for these templates or remove the templates with this typeName.`);
+                        return;
+                    }
+
+                    // Group device and FHIR mappings with the same type name into the same mapping
+                    const fhirMapping = _.remove(fhirMappings, { typeName: typename });
+                    createMapping(typename, deviceMapping.device, fhirMapping.length ? fhirMapping[0].fhir : undefined)
+                        .then((newMapping: Mapping) => {
+                            newMappings.push(newMapping);
+                        })
+                        .catch(err => {
+                            reject(err);
+                            return;
+                        });
+                }
+
+                for (const fhirMapping of fhirMappings) {
+                    const typename = fhirMapping.typeName;
+                    if (_.find(currentMappings, { typeName: typename })) {
+                        reject(`A mapping in the Data Mapper already has the typeName "${typename}".
+                            Please enter another typeName for these templates or remove the templates with this typeName.`);
+                        return;
+                    }
+
+                    createMapping(typename, undefined, fhirMapping.fhir)
+                        .then((newMapping: Mapping) => {
+                            newMappings.push(newMapping);
+                        })
+                        .catch(err => {
+                            reject(err);
+                            return;
+                        });
+                }
+
+                resolve(newMappings);
+                return;
+            })
+            .catch(err => {
+                reject(err);
+                return;
+            });
+    });
+}
+
+const createMapping = (typename: string, device?: DeviceMapping, fhir?: FhirMapping): Promise<Mapping> => {
+    const id = generateUID();
+    return updateMapping(id, typename, device, fhir);
+}
+
+const updateMapping = (id: string, typename: string, device?: DeviceMapping, fhir?: FhirMapping): Promise<Mapping> => {
+    return new Promise((resolve, reject) => {
+        if (!typename || typename.trim().length < 1) {
+            reject(`The type name cannot be empty`);
             return;
         }
 
-        const newMappingId = generateUID();
-        const newMapping = {
-            id: newMappingId,
-            typeName: typename
-        } as Mapping;
-        saveMappingToLocalStorage(newMappingId, newMapping);
+        const existingMapping = getMapping(id);
+        if (existingMapping && existingMapping.typeName === typename) {
+            resolve(existingMapping);
+            return;
+        }
 
-        resolve(newMapping);
+        const mappings = getAllMappings();
+        if (_.find(mappings, { typeName: typename })) {
+            reject(`The type name "${typename}" already exists`);
+            return;
+        }
+
+        const mapping = {
+            id: id,
+            typeName: typename,
+            device: device,
+            fhir: fhir
+        } as Mapping;
+        saveMappingToLocalStorage(id, mapping);
+
+        resolve(mapping);
         return;
     });
 }
@@ -86,8 +169,10 @@ const generateUID = () => {
 // the backend server.
 const PersistService = {
     createMapping: createMapping,
+    createMappingsFromTemplates: createMappingsFromTemplates,
     getAllMappings: getAllMappings,
     getMapping: getMapping,
+    renameMapping: updateMapping,
     saveMapping: saveMappingToLocalStorage,
     deleteMapping: deleteMappingInLocalStorage
 }
